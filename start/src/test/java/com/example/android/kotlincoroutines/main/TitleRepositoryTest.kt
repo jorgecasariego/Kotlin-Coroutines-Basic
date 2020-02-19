@@ -17,6 +17,12 @@
 package com.example.android.kotlincoroutines.main
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import com.example.android.kotlincoroutines.fakes.MainNetworkCompletableFake
+import com.example.android.kotlincoroutines.fakes.MainNetworkFake
+import com.example.android.kotlincoroutines.fakes.TitleDaoFake
+import com.google.common.truth.Truth
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runBlockingTest
 import org.junit.Rule
 import org.junit.Test
 
@@ -26,13 +32,52 @@ class TitleRepositoryTest {
     val instantTaskExecutorRule = InstantTaskExecutorRule()
 
     @Test
-    fun whenRefreshTitleSuccess_insertsRows() {
-        // TODO: Write this test
+    fun whenRefreshTitleSuccess_insertsRows() = runBlockingTest {
+        val titleDao = TitleDaoFake("title")
+        val subject = TitleRepository(
+                MainNetworkFake("OK"),
+                titleDao
+        )
+
+        // launch starts a coroutine then immediately returns
+//        GlobalScope.launch {
+//            // since this is asynchronous code, this may be called *after* the test completes
+//            subject.refreshTitle()
+//        }
+        // test function returns immediately, and
+        // doesn't see the results of refreshTitle
+
+        subject.refreshTitle()
+        Truth.assertThat(titleDao.nextInsertedOrNull()).isEqualTo("OK")
     }
 
+    /**
+     * This test uses the provided fake MainNetworkCompletableFake, which is a network fake that's
+     * designed to suspend callers until the test continues them. When refreshTitle tries to make a
+     * network request, it'll hang forever because we want to test timeouts.
+     *
+     * Then, it launches a separate coroutine to call refreshTitle. This is a key part of testing timeouts,
+     * the timeout should happen in a different coroutine than the one runBlockingTest creates.
+     * By doing so, we can call the next line, advanceTimeBy(5_000) which will advance time by 5 seconds
+     * and cause the other coroutine to timeout.
+     *
+     * This is a complete timeout test, and it will pass once we implement timeout.
+     */
     @Test(expected = TitleRefreshError::class)
-    fun whenRefreshTitleTimeout_throws() {
-        // TODO: Write this test
-        throw TitleRefreshError("Remove this – made test pass in starter code", null)
+    fun whenRefreshTitleTimeout_throws() = runBlockingTest {
+        // throw TitleRefreshError("Remove this – made test pass in starter code", null)
+        val network = MainNetworkCompletableFake()
+        val subject = TitleRepository(
+                network,
+                TitleDaoFake("title")
+        )
+
+        launch {
+            // When refreshTitle tries to make a network request, it'll hang forever because we
+            // want to test timeouts.
+            subject.refreshTitle()
+        }
+
+        advanceTimeBy(5_000)
     }
 }
